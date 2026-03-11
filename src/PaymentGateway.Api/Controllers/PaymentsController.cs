@@ -1,7 +1,9 @@
 using Microsoft.AspNetCore.Mvc;
 
+using PaymentGateway.Api.Enums;
+using PaymentGateway.Api.Models.Requests;
 using PaymentGateway.Api.Models.Responses;
-using PaymentGateway.Api.Repositories;
+using PaymentGateway.Api.Services;
 
 namespace PaymentGateway.Api.Controllers;
 
@@ -9,30 +11,32 @@ namespace PaymentGateway.Api.Controllers;
 [ApiController]
 public class PaymentsController : ControllerBase
 {
-    private readonly IPaymentsRepository _paymentsRepository;
+    private readonly IPaymentService _paymentService;
 
-    public PaymentsController(IPaymentsRepository paymentsRepository)
+    public PaymentsController(IPaymentService paymentService)
     {
-        _paymentsRepository = paymentsRepository;
+        _paymentService = paymentService;
+    }
+
+    [HttpPost]
+    public async Task<ActionResult<PaymentResponse>> PostPaymentAsync(PostPaymentRequest request)
+    {
+        if (!ModelState.IsValid)
+            return BadRequest(new PaymentResponse { Status = PaymentStatus.Rejected });
+
+        var result = await _paymentService.ProcessPaymentAsync(request);
+
+        // Expiry cross-field check failed inside the service
+        if (result.Status == PaymentStatus.Rejected)
+            return BadRequest(result);
+
+        return Ok(result);
     }
 
     [HttpGet("{id:guid}")]
     public ActionResult<PaymentResponse> GetPaymentAsync(Guid id)
     {
-        var payment = _paymentsRepository.Get(id);
-
-        if (payment is null)
-            return NotFound();
-
-        return Ok(new PaymentResponse
-        {
-            Id = payment.Id,
-            Status = payment.Status,
-            CardNumberLastFour = payment.CardNumberLastFour,
-            ExpiryMonth = payment.ExpiryMonth,
-            ExpiryYear = payment.ExpiryYear,
-            Currency = payment.Currency,
-            Amount = payment.Amount
-        });
+        var payment = _paymentService.GetPayment(id);
+        return payment is null ? NotFound() : Ok(payment);
     }
 }
