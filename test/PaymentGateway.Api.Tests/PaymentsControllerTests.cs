@@ -90,6 +90,45 @@ public class PaymentsControllerTests
         Assert.Equal(PaymentStatus.Rejected, body!.Status);
     }
 
+    [Fact]
+    public async Task PostPayment_Returns400_WhenCardNumberContainsLetters()
+    {
+        var request = ValidRequest();
+        request.CardNumber = "2222405343ABCD77"; // correct length but non-numeric
+
+        var response = await BuildClient().PostAsJsonAsync("/api/Payments", request);
+        var body     = await response.Content.ReadFromJsonAsync<PaymentResponse>();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(PaymentStatus.Rejected, body!.Status);
+    }
+
+    [Fact]
+    public async Task PostPayment_Returns400_WhenCvvInvalid()
+    {
+        var request = ValidRequest();
+        request.Cvv = "12"; // too short (< 3 digits)
+
+        var response = await BuildClient().PostAsJsonAsync("/api/Payments", request);
+        var body     = await response.Content.ReadFromJsonAsync<PaymentResponse>();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(PaymentStatus.Rejected, body!.Status);
+    }
+
+    [Fact]
+    public async Task PostPayment_Returns400_WhenAmountIsZero()
+    {
+        var request = ValidRequest();
+        request.Amount = 0; // fails [Range(1, int.MaxValue)]
+
+        var response = await BuildClient().PostAsJsonAsync("/api/Payments", request);
+        var body     = await response.Content.ReadFromJsonAsync<PaymentResponse>();
+
+        Assert.Equal(HttpStatusCode.BadRequest, response.StatusCode);
+        Assert.Equal(PaymentStatus.Rejected, body!.Status);
+    }
+
     // -----------------------------------------------------------------------
     // POST /api/payments — cross-field expiry check → Rejected (400)
     // -----------------------------------------------------------------------
@@ -142,6 +181,34 @@ public class PaymentsControllerTests
         Assert.NotNull(body);
         Assert.Equal(PaymentStatus.Declined, body!.Status);
         Assert.NotEqual(Guid.Empty, body.Id);
+    }
+
+    // -----------------------------------------------------------------------
+    // POST → GET round-trip (proves persistence works)
+    // -----------------------------------------------------------------------
+
+    [Fact]
+    public async Task GetPayment_ReturnsStoredPayment_AfterSuccessfulPost()
+    {
+        var repo   = new PaymentsRepository();
+        var fake   = new FakeBankClient(new BankPaymentResponse(Authorized: true, AuthorizationCode: "code-abc"));
+        var client = BuildClient(repository: repo, bankClient: fake);
+
+        var postResponse = await client.PostAsJsonAsync("/api/Payments", ValidRequest());
+        var postBody     = await postResponse.Content.ReadFromJsonAsync<PaymentResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, postResponse.StatusCode);
+
+        var getResponse = await client.GetAsync($"/api/Payments/{postBody!.Id}");
+        var getBody     = await getResponse.Content.ReadFromJsonAsync<PaymentResponse>();
+
+        Assert.Equal(HttpStatusCode.OK, getResponse.StatusCode);
+        Assert.NotNull(getBody);
+        Assert.Equal(postBody.Id,                 getBody!.Id);
+        Assert.Equal(postBody.Status,             getBody.Status);
+        Assert.Equal(postBody.CardNumberLastFour, getBody.CardNumberLastFour);
+        Assert.Equal(postBody.Currency,           getBody.Currency);
+        Assert.Equal(postBody.Amount,             getBody.Amount);
     }
 
     // -----------------------------------------------------------------------
