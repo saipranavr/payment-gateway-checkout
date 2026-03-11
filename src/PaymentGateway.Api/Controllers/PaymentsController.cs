@@ -1,7 +1,7 @@
 using Microsoft.AspNetCore.Mvc;
 
 using PaymentGateway.Api.Models.Responses;
-using PaymentGateway.Api.Services;
+using PaymentGateway.Api.Repositories;
 
 namespace PaymentGateway.Api.Controllers;
 
@@ -9,9 +9,9 @@ namespace PaymentGateway.Api.Controllers;
 [ApiController]
 public class PaymentsController : ControllerBase
 {
-    private readonly PaymentsRepository _paymentsRepository;
+    private readonly IPaymentsRepository _paymentsRepository;
 
-    public PaymentsController(PaymentsRepository paymentsRepository)
+    public PaymentsController(IPaymentsRepository paymentsRepository)
     {
         _paymentsRepository = paymentsRepository;
     }
@@ -21,6 +21,18 @@ public class PaymentsController : ControllerBase
     {
         var payment = _paymentsRepository.Get(id);
 
-        return new OkObjectResult(payment);
+        if (payment is null)
+            return NotFound();
+
+        return Ok(new PaymentResponse
+        {
+            Id = payment.Id,
+            Status = payment.Status,
+            CardNumberLastFour = payment.CardNumberLastFour,
+            ExpiryMonth = payment.ExpiryMonth,
+            ExpiryYear = payment.ExpiryYear,
+            Currency = payment.Currency,
+            Amount = payment.Amount
+        });
     }
 }
