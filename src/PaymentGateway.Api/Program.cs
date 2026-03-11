@@ -1,4 +1,5 @@
 using PaymentGateway.Api.Repositories;
+using PaymentGateway.Api.Services;
 
 var builder = WebApplication.CreateBuilder(args);
 
@@ -10,6 +11,11 @@ builder.Services.AddEndpointsApiExplorer();
 builder.Services.AddSwaggerGen();
 
 builder.Services.AddSingleton<IPaymentsRepository, PaymentsRepository>();
+
+builder.Services.AddHttpClient<IBankSimulatorClient, BankSimulatorClient>(client =>
+{
+    client.BaseAddress = new Uri(builder.Configuration["BankSimulator:BaseUrl"]!);
+});
 
 var app = builder.Build();
 
