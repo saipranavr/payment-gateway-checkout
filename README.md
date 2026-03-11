@@ -1,18 +1,12 @@
-# Instructions for candidates
+## Design Considerations & Assumptions
 
-This is the .NET version of the Payment Gateway challenge. If you haven't already read this [README.md](https://github.com/cko-recruitment/) on the details of this exercise, please do so now. 
+### Architecture & Design
+* **Architecture:** Extracted core logic into services, used Dependency Inversion via interfaces (`IPaymentService`, `IPaymentsRepository`), and separated Domain Entities from API DTOs to keep controllers thin and highly testable.
+* **Validation:** Used ASP.NET Core Data Annotations (`[Range]`, `[RegularExpression]`) for simple field validation. Suppressed default `ModelStateInvalidFilter` to map 400 errors directly to the `{ "status": "Rejected" }` payload requested by the spec.
+* **Typed HTTP Client:** Used `IHttpClientFactory` to configure and inject `BankSimulatorClient`, ensuring correct handling of the `HttpClient` lifecycle and avoiding socket exhaustion.
 
-## Template structure
-```
-src/
-    PaymentGateway.Api - a skeleton ASP.NET Core Web API
-test/
-    PaymentGateway.Api.Tests - an empty xUnit test project
-imposters/ - contains the bank simulator configuration. Don't change this
-
-.editorconfig - don't change this. It ensures a consistent set of rules for submissions when reformatting code
-docker-compose.yml - configures the bank simulator
-PaymentGateway.sln
-```
-
-Feel free to change the structure of the solution, use a different test library etc.
+### Trade-offs & Assumptions (Given Constraints)
+* **Storage Thread-Safety:** Used a basic in-memory `List<Payment>` repository as a test double to meet constraints without over-engineering. In production, this would be backed by a proper database (e.g. via EF Core) or at least `ConcurrentDictionary` to prevent multithreaded race conditions.
+* **Resilience:** Omitted circuit breakers, retries (e.g. Polly), or asynchronous queuing architectures for bank simulator calls to optimize for code simplicity based on the brief.
+* **PCI Compliance:** Assumed plain-text submission of card networks (PANs) is acceptable purely for this exercise. Real-world implementations would rely on tokenized inputs via iFrames (e.g. Checkout.com Frames) to prevent raw PAN ingestion.
+* **Date Validation:** Hardcoded `2024` as the minimum array constraint for `ExpiryYear` in data annotations for simplicity, assuming the current year. Custom validation logic would be required for dynamic year tracking.
